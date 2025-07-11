@@ -1,0 +1,165 @@
+{
+  "workflow_versions": {
+    "single_post_mode": {
+      "description": "Handles one pending row per trigger, generates content based on type, uploads to Google Drive, and updates status.",
+      "nodes": [
+        {
+          "id": "trigger_manual",
+          "name": "Manual Trigger",
+          "type": "n8n-nodes-base.manualTrigger",
+          "typeVersion": 1,
+          "position": [100, 300]
+        },
+        {
+          "id": "read_sheet",
+          "name": "Read Google Sheet",
+          "type": "n8n-nodes-base.googleSheets",
+          "typeVersion": 2,
+          "position": [300, 300],
+          "parameters": {
+            "operation": "read",
+            "sheetId": "your-google-sheet-id",
+            "range": "Sheet1!A2:I",
+            "returnAll": true
+          },
+          "credentials": {
+            "googleSheetsOAuth2Api": {
+              "id": "your-google-sheets-credential-id",
+              "name": "Google Sheets Account"
+            }
+          }
+        },
+        {
+          "id": "filter_pending",
+          "name": "Filter Pending",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [500, 300],
+          "parameters": {
+            "conditions": {
+              "string": [
+                {
+                  "value1": "={{$json[\"Status\"]}}",
+                  "operation": "equal",
+                  "value2": "pending"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "get_first",
+          "name": "Get First",
+          "type": "n8n-nodes-base.itemLists",
+          "typeVersion": 1,
+          "position": [700, 300],
+          "parameters": {
+            "operation": "firstItem"
+          }
+        },
+        {
+          "id": "check_type",
+          "name": "Check Type",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [900, 300],
+          "parameters": {
+            "conditions": {
+              "string": [
+                { "value1": "={{$json.Type}}", "operation": "equal", "value2": "image" },
+                { "value1": "={{$json.Type}}", "operation": "equal", "value2": "carousel" },
+                { "value1": "={{$json.Type}}", "operation": "equal", "value2": "reel" }
+              ]
+            }
+          }
+        },
+        {
+          "id": "generate_image",
+          "name": "Generate Image (DeepAI)",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 1,
+          "position": [1100, 100],
+          "parameters": {
+            "url": "https://api.deepai.org/api/text2img",
+            "method": "POST",
+            "headers": [{"name": "Api-Key", "value": "your_deepai_api_key"}],
+            "bodyParametersUi": {
+              "parameter": [
+                { "name": "text", "value": "={{$json[\"Visual Prompt\"]}}" }
+              ]
+            }
+          }
+        },
+        {
+          "id": "generate_voiceover",
+          "name": "Generate Voiceover (VoiceoverMaker.io)",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 1,
+          "position": [1100, 500],
+          "parameters": {
+            "url": "https://api.voiceovermaker.io/audio",
+            "method": "POST",
+            "headers": [
+              {"name": "Authorization", "value": "Bearer your_voiceovermaker_api_key"},
+              {"name": "Content-Type", "value": "application/json"}
+            ],
+            "jsonParameters": true,
+            "bodyParametersJson": "{ \"text\": \"{{$json[\"Reel VO\"]}}\", \"voice\": \"en-US-Standard-C\", \"output_format\": \"mp3\" }"
+          }
+        },
+        {
+          "id": "upload_drive",
+          "name": "Upload to Google Drive",
+          "type": "n8n-nodes-base.googleDrive",
+          "typeVersion": 1,
+          "position": [1300, 300],
+          "parameters": {
+            "operation": "upload",
+            "fileName": "=Post_{{$json[\"Day\"]}}.jpg",
+            "fileContent": "={{$json[\"image_url\"]}}"
+          },
+          "credentials": {
+            "googleDriveOAuth2Api": {
+              "id": "your-gdrive-credentials-id",
+              "name": "Google Drive"
+            }
+          }
+        },
+        {
+          "id": "update_status",
+          "name": "Update Status",
+          "type": "n8n-nodes-base.googleSheets",
+          "typeVersion": 2,
+          "position": [1500, 300],
+          "parameters": {
+            "operation": "update",
+            "sheetId": "your-google-sheet-id",
+            "range": "Sheet1!A2:I",
+            "updateFields": { "Status": "done" }
+          },
+          "credentials": {
+            "googleSheetsOAuth2Api": {
+              "id": "your-google-sheets-credential-id",
+              "name": "Google Sheets Account"
+            }
+          }
+        }
+      ]
+    },
+    "multi_post_loop_mode": {
+      "description": "Loops through all pending posts and performs automation based on Type.",
+      "strategy": "Replace manual trigger with scheduled trigger, use IF inside a Loop (for each item with Status = pending). Share components with single_post_mode."
+    },
+    "html_form_trigger": {
+      "description": "Uses webhook to accept post input from external HTML form.",
+      "method": "POST",
+      "webhook_url": "https://n8n.yourdomain.com/webhook/trigger-instagram-post",
+      "parameters": ["Day", "Type", "VisualPrompt", "CaptionText", "ReelVO", "PostCaption", "CTA"]
+    },
+    "notion_interface": {
+      "description": "Use Notion database with matching columns. n8n reads row with Status = 'pending'.",
+      "url": "https://www.notion.so/instagram-post-planner-template",
+      "columns": ["Day", "Type", "Content Idea", "Visual Prompt", "Caption Text", "Reel VO", "Post Caption", "CTA", "Status"]
+    }
+  }
+}
