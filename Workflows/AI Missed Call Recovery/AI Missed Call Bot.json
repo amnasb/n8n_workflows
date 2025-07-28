@@ -1,0 +1,323 @@
+{
+  "name": "AI Missed Call Recovery Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "missed-call-demo",
+        "options": {
+
+        }
+      },
+      "id": "6960aa41-3215-4826-ab78-abf8f3a9f10b",
+      "name": "Missed Call Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-528, -48],
+      "webhookId": "missed-call-demo"
+    },
+    {
+      "parameters": {
+        "from": "{{ $env.TWILIO_PHONE || '+1234567890' }}",
+        "to": "={{ $json.From || $json.phone }}",
+        "message": "Hi! Thanks for calling {{ $env.BUSINESS_NAME || 'our business' }}! 👋\n\nSorry we missed you! I'm an AI assistant here to help you immediately.\n\nHow can I help you today? Just reply to this message!\n\n📅 Schedule service\n🔧 Get a quote\n❓ Ask a question\n🚨 Emergency help",
+        "options": {
+
+        }
+      },
+      "id": "ea120a85-44cd-46a3-830b-e4cb52644a0b",
+      "name": "Send Instant SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [-240, -48],
+      "credentials": {
+        "twilioApi": {
+          "id": "FehsJsaqSHHsaAd7",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "={{ $env.AIRTABLE_BASE || 'appXXXXXXXXXXXXXX' }}",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.From || $json.phone }}",
+            "Status": "New Lead",
+            "Source": "Missed Call",
+            "Created": "={{ $now.toISO() }}",
+            "Last Contact": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {
+
+        }
+      },
+      "id": "e5f0013f-5d98-417a-bf74-c956ce95f6f5",
+      "name": "Track Lead",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [-240, 160],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "PYbFr77wPDC1r6my",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sms-reply-demo",
+        "options": {
+
+        }
+      },
+      "id": "4aefc483-5711-4157-a850-12a205696e83",
+      "name": "SMS Reply Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-528, 352],
+      "webhookId": "sms-reply-demo"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a friendly AI assistant for a local service business. Keep responses under 160 characters for SMS. Be helpful and professional.\n\nServices offered:\n- Installation & Repair\n- Maintenance\n- Emergency Service\n- Free Quotes\n\nBusiness hours: Mon-Fri 8AM-6PM, Sat 9AM-3PM\nEmergency service: 24/7\nResponse time: 30 minutes for emergencies\n\nAlways:\n1. Be concise and friendly\n2. Identify if it's an emergency\n3. Offer to schedule appointments\n4. Provide quick answers"
+            },
+            {
+              "content": "={{ $json.Body }}"
+            }
+          ]
+        },
+        "options": {
+
+        },
+        "requestOptions": {
+
+        }
+      },
+      "id": "70fa1c00-c20c-4d54-a6ec-30e8fc965802",
+      "name": "AI Process Message",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [-240, 352],
+      "credentials": {
+        "openAiApi": {
+          "id": "DmLw94uPIXdjuj2o",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $env.TWILIO_PHONE || '+1234567890' }}",
+        "to": "={{ $('SMS Reply Trigger').item.json.From }}",
+        "message": "={{ $json.message.content }}",
+        "options": {
+
+        }
+      },
+      "id": "9cc363c8-afe6-4198-95d2-a262a2ef81ac",
+      "name": "Send AI Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [80, 352],
+      "credentials": {
+        "twilioApi": {
+          "id": "FehsJsaqSHHsaAd7",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('AI Process Message').item.json.message.content.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "emergency"
+            },
+            {
+              "value1": "={{ $('SMS Reply Trigger').item.json.Body.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "urgent"
+            },
+            {
+              "value1": "={{ $('SMS Reply Trigger').item.json.Body.toLowerCase() }}",
+              "operation": "contains",
+              "value2": "asap"
+            }
+          ]
+        },
+        "options": {
+
+        }
+      },
+      "id": "185e2acc-a6c4-470c-b442-80defc0c77f4",
+      "name": "Check Emergency",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [80, 560]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "sendTo": "={{ $env.NOTIFICATION_EMAIL || 'owner@business.com' }}",
+        "subject": "🚨 EMERGENCY Lead Alert - Immediate Action Required",
+        "message": "\u003Cdiv style='font-family: Arial, sans-serif; padding: 20px; background-color: #fee; border: 2px solid #f00; border-radius: 10px;'\u003E\n\u003Ch2 style='color: #d00;'\u003E⚠️ Emergency Service Request\u003C/h2\u003E\n\u003Cp\u003E\u003Cstrong\u003ECustomer Phone:\u003C/strong\u003E {{ $('SMS Reply Trigger').item.json.From }}\u003C/p\u003E\n\u003Cp\u003E\u003Cstrong\u003EMessage:\u003C/strong\u003E {{ $('SMS Reply Trigger').item.json.Body }}\u003C/p\u003E\n\u003Cp\u003E\u003Cstrong\u003ETime:\u003C/strong\u003E {{ $now.format('MMM DD, YYYY h:mm A') }}\u003C/p\u003E\n\u003Chr\u003E\n\u003Cp style='background-color: #ffd; padding: 10px; border-radius: 5px;'\u003E\n\u003Cstrong\u003EAI Response:\u003C/strong\u003E {{ $('AI Process Message').item.json.message.content }}\n\u003C/p\u003E\n\u003Cp\u003E\u003Ca href='tel:{{ $('SMS Reply Trigger').item.json.From }}' style='background-color: #d00; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'\u003E📞 Call Customer Now\u003C/a\u003E\u003C/p\u003E\n\u003C/div\u003E",
+        "options": {
+
+        }
+      },
+      "id": "cee96d74-f08f-4bd7-9ba8-04536a1f57df",
+      "name": "Emergency Alert Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [368, 560],
+      "webhookId": "3791f9f5-2bce-454b-989c-2c8fcd8939e0",
+      "credentials": {
+        "googleApi": {
+          "id": "qZQGWJyuEWdNlR0Q",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 🚀 AI Missed Call Recovery Bot - Starter Edition\n\n### What This Workflow Does:\n1. **Instantly responds** to missed calls with SMS\n2. **AI-powered conversations** handle customer inquiries\n3. **Tracks every lead** in Airtable\n4. **Detects emergencies** and alerts you immediately\n\n### Setup Required:\n- Twilio account (SMS)\n- OpenAI API key (GPT-3.5)\n- Airtable base (lead tracking)\n- Gmail account (alerts)\n\n### Expected Results:\n- 70-80% response rate\n- 30-40% booking rate\n- Never miss another lead!\n\n### Need Help?\nGet your custom AI agent built!\n📧 contact@yourbusiness.com",
+        "height": 350,
+        "width": 300,
+        "color": 4
+      },
+      "id": "4ad7f608-c07b-4954-b39f-04f9a7fdc8f6",
+      "name": "Workflow Info",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, -48]
+    }
+  ],
+  "pinData": {
+
+  },
+  "connections": {
+    "Missed Call Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Instant SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Reply Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Process Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Process Message": {
+      "main": [
+        [
+          {
+            "node": "Send AI Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Emergency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Emergency": {
+      "main": [
+        [
+          {
+            "node": "Emergency Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "054e817b-cb0c-4e80-b0af-c12494e340cc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f31c8cf0f30c343fde4e229f596b53099ee0496367bfd39c53458e5afe95e91e"
+  },
+  "id": "aFTKR8ehR9i6fCEX",
+  "tags": [
+    {
+      "name": "lead-generation",
+      "id": "OUfWSLOS7qlimwbX",
+      "createdAt": "2025-07-18T13:51:03.784Z",
+      "updatedAt": "2025-07-18T13:51:03.784Z"
+    },
+    {
+      "name": "automation",
+      "id": "RWZu4rbr4OBEcvV4",
+      "createdAt": "2025-07-18T13:51:03.792Z",
+      "updatedAt": "2025-07-18T13:51:03.792Z"
+    },
+    {
+      "name": "twilio",
+      "id": "msAY1sLRpspCwadi",
+      "createdAt": "2025-07-18T13:51:03.792Z",
+      "updatedAt": "2025-07-18T13:51:03.792Z"
+    },
+    {
+      "name": "ai",
+      "id": "DOpgxpcZrhzk6zur",
+      "createdAt": "2025-07-18T13:51:03.799Z",
+      "updatedAt": "2025-07-18T13:51:03.799Z"
+    },
+    {
+      "name": "starter",
+      "id": "HW2fZk3RyRSyJ6Al",
+      "createdAt": "2025-07-18T14:07:48.815Z",
+      "updatedAt": "2025-07-18T14:07:48.815Z"
+    },
+    {
+      "name": "demo",
+      "id": "MZtUTINd0UKeu9tN",
+      "createdAt": "2025-07-18T14:07:48.884Z",
+      "updatedAt": "2025-07-18T14:07:48.884Z"
+    }
+  ]
+}
